@@ -1,12 +1,17 @@
 import telebot
 from telebot import types
-import os
+import logging
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Токен вашего бота
 bot = telebot.TeleBot('7717396942:AAHHTTG5Bx9UsExbsCVMxMRGhJg70_ZahNU')
 
 # Ваш ID для получения уведомлений
-YOUR_TELEGRAM_ID = 123456789  # Замените на ваш Telegram ID
+YOUR_TELEGRAM_ID = 5744368771  # Замените на ваш Telegram ID
 
 # Словарь для хранения услуг и их цен
 services = {
@@ -42,129 +47,130 @@ def start(message):
 
 # Клавиатура с услугами
 def get_services_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
     for service_key, service_data in services.items():
-        keyboard.add(InlineKeyboardButton(service_data['name'], callback_data=f"service_{service_key}"))
+        keyboard.add(types.InlineKeyboardButton(service_data['name'], callback_data=f"service_{service_key}"))
     return keyboard
 
 
 # Обработчик выбора услуги
 @bot.callback_query_handler(func=lambda call: call.data.startswith('service_'))
 def handle_service_selection(call):
-    service_key = call.data.split('_')[1]
-    service = services.get(service_key)
+    try:
+        service_key = call.data.split('_')[1]
+        service = services.get(service_key)
 
-    if service:
-        user_states[call.from_user.id]['selected_service'] = service_key
-        bot.send_message(
-            call.message.chat.id,
-            f"Вы выбрали услугу: *{service['name']}*\n"
-            f"Стоимость: ${service['price']}\n\n"
-            "Выберите действие:",
-            reply_markup=get_payment_or_contact_keyboard(),
-            parse_mode='Markdown'
-        )
+        if service:
+            user_states[call.from_user.id]['selected_service'] = service_key
+            bot.send_message(
+                call.message.chat.id,
+                f"Вы выбрали услугу: *{service['name']}*\n"
+                f"Стоимость: ${service['price']}\n\n"
+                "Выберите действие:",
+                reply_markup=get_payment_or_contact_keyboard(),
+                parse_mode='Markdown'
+            )
+    except Exception as e:
+        logger.error(f"Error in handle_service_selection: {e}")
+        bot.send_message(call.message.chat.id, "Произошла ошибка. Пожалуйста, попробуйте снова.")
 
 
 # Клавиатура для оплаты или связи
 def get_payment_or_contact_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
-        InlineKeyboardButton("💳 Оплатить", callback_data="pay"),
-        InlineKeyboardButton("📞 Связаться со мной", callback_data="contact")
+        types.InlineKeyboardButton("💳 Оплатить", callback_data="pay"),
+        types.InlineKeyboardButton("📞 Связаться со мной", callback_data="contact"),
+        types.InlineKeyboardButton("📝 Создать чат для ТЗ", callback_data="create_chat")
     )
     return keyboard
+
+
+# Обработчик создания чата для ТЗ
+@bot.callback_query_handler(func=lambda call: call.data == 'create_chat')
+def handle_create_chat(call):
+    try:
+        user_id = call.from_user.id
+        username = call.from_user.username
+        chat_id = call.message.chat.id
+
+        # Формируем текст уведомления
+        notification_text = (
+            f"🔔 Новый запрос на создание чата для ТЗ!\n"
+            f"ID пользователя: {user_id}\n"
+            f"Username: @{username}\n"
+            f"Чат ID: {chat_id}"
+        )
+
+        # Отправляем уведомление администратору
+        bot.send_message(YOUR_TELEGRAM_ID, notification_text)
+
+        # Ответ пользователю
+        bot.send_message(
+            chat_id,
+            "Чат для ТЗ создан! Я свяжусь с вами в ближайшее время."
+        )
+    except Exception as e:
+        logger.error(f"Error in handle_create_chat: {e}")
+        bot.send_message(call.message.chat.id, "Произошла ошибка. Пожалуйста, попробуйте снова.")
 
 
 # Обработчик оплаты
 @bot.callback_query_handler(func=lambda call: call.data == 'pay')
 def handle_payment(call):
-    service_key = user_states[call.from_user.id].get('selected_service')
-    service = services.get(service_key)
+    try:
+        service_key = user_states[call.from_user.id].get('selected_service')
+        service = services.get(service_key)
 
-    if service:
-        bot.send_message(
-            call.message.chat.id,
-            f"Оплата услуги *{service['name']}* (${service['price']})\n"
-            "Для оплаты перейдите по ссылке: [Оплатить](https://example.com/pay)\n\n"
-            "После оплаты свяжитесь со мной для подтверждения.",
-            parse_mode='Markdown'
-        )
+        if service:
+            bot.send_message(
+                call.message.chat.id,
+                f"Оплата услуги *{service['name']}* (${service['price']})\n"
+                "Для оплаты перейдите по ссылке: [Оплатить](https://example.com/pay)\n\n"
+                "После оплаты свяжитесь со мной для подтверждения.",
+                parse_mode='Markdown'
+            )
+    except Exception as e:
+        logger.error(f"Error in handle_payment: {e}")
+        bot.send_message(call.message.chat.id, "Произошла ошибка. Пожалуйста, попробуйте снова.")
 
 
 # Обработчик связи с вами
 @bot.callback_query_handler(func=lambda call: call.data == 'contact')
 def handle_contact(call):
-    user_id = call.from_user.id
-    username = call.from_user.username
-    chat_id = call.message.chat.id
+    try:
+        user_id = call.from_user.id
+        username = call.from_user.username
+        chat_id = call.message.chat.id
 
-    # Отправка уведомления вам
-    notification_text = (
-        f"🔔 Новый запрос на связь!\n"
-        f"ID пользователя: {user_id}\n"
-        f"Username: @{username}\n"
-        f"Чат ID: {chat_id}"
-    )
-    bot.send_message(YOUR_TELEGRAM_ID, notification_text)
-
-    # Ответ пользователю
-    if username:
-        bot.send_message(
-            chat_id,
-            "Спасибо за обращение! Я свяжусь с вами в течение 24 часов в личных сообщениях."
-        )
-    else:
-        bot.send_message(
-            chat_id,
-            "У вас нет username. Для связи через бота нажмите кнопку ниже.",
-            reply_markup=get_start_chat_keyboard()
+        # Формируем текст уведомления
+        notification_text = (
+            f"🔔 Новый запрос на связь!\n"
+            f"ID пользователя: {user_id}\n"
+            f"Username: @{username}\n"
+            f"Чат ID: {chat_id}"
         )
 
+        # Отправляем уведомление администратору
+        bot.send_message(YOUR_TELEGRAM_ID, notification_text)
 
-# Клавиатура для начала диалога через бота
-def get_start_chat_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(InlineKeyboardButton("Начать диалог через бота", callback_data="start_chat"))
-    return keyboard
-
-
-# Обработчик начала диалога через бота
-@bot.callback_query_handler(func=lambda call: call.data == 'start_chat')
-def handle_start_chat(call):
-    user_id = call.from_user.id
-    user_states[user_id]['state'] = 'chatting'
-
-    bot.send_message(
-        call.message.chat.id,
-        "Введите ваше сообщение, и я передам его владельцу бота."
-    )
-
-
-# Обработчик текстовых сообщений в режиме диалога
-@bot.message_handler(func=lambda message: user_states.get(message.from_user.id, {}).get('state') == 'chatting')
-def handle_chat_message(message):
-    user_id = message.from_user.id
-    username = message.from_user.username
-    text = message.text
-
-    # Пересылка сообщения вам
-    forwarded_message = (
-        f"💬 Сообщение от пользователя:\n"
-        f"ID: {user_id}\n"
-        f"Username: @{username}\n"
-        f"Текст: {text}"
-    )
-    bot.send_message(YOUR_TELEGRAM_ID, forwarded_message)
-
-    # Ответ пользователю
-    bot.send_message(
-        message.chat.id,
-        "Ваше сообщение успешно отправлено! Ждите ответа."
-    )
+        # Ответ пользователю
+        bot.send_message(
+            chat_id,
+            "Спасибо за обращение! Я свяжусь с вами в течение 24 часов."
+        )
+    except Exception as e:
+        logger.error(f"Error in handle_contact: {e}")
+        bot.send_message(call.message.chat.id, "Произошла ошибка. Пожалуйста, попробуйте снова.")
 
 
 # Запуск бота
 if __name__ == '__main__':
-    print("Бот запущен...")
-    bot.polling(none_stop=True)
+    while True:
+        try:
+            logger.info("Бот запущен...")
+            bot.polling(none_stop=True)
+        except Exception as e:
+            logger.error(f"Critical error: {e}")
+            logger.info("Перезапуск бота через 5 секунд...")
+            time.sleep(5)
